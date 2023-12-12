@@ -37,12 +37,17 @@ public class BridgeTestNetConstants extends BridgeConstants {
     BridgeTestNetConstants() {
         btcParamsString = NetworkParameters.ID_TESTNET;
 
+        // federator1
         BtcECKey federator0PublicKey = BtcECKey.fromPublicOnly(
             Hex.decode("0362634ab57dae9cb373a5d536e66a8c4f67468bbcfb063809bab643072d78a124")
         );
+
+        // federator2
         BtcECKey federator1PublicKey = BtcECKey.fromPublicOnly(
             Hex.decode("03c5946b3fbae03a654237da863c9ed534e0878657175b132b8ca630f245df04db")
         );
+
+        // federator3
         BtcECKey federator2PublicKey = BtcECKey.fromPublicOnly(
             Hex.decode("02cd53fc53a07f211641a677d250f6de99caf620e8e77071e811a28b3bcddf0be1")
         );
@@ -68,7 +73,7 @@ public class BridgeTestNetConstants extends BridgeConstants {
         btc2RskMinimumAcceptableConfirmationsOnRsk = 2;
         rsk2BtcMinimumAcceptableConfirmations = 2;
 
-        updateBridgeExecutionPeriod = 3 * 60 * 1000; // 3 minutes
+        updateBridgeExecutionPeriod = 1 * 60 * 1000; // 3 minutes
 
         maxBtcHeadersPerRskBlock = 500;
 
@@ -138,7 +143,7 @@ public class BridgeTestNetConstants extends BridgeConstants {
         btcHeightWhenBlockIndexActivates = 2_039_594;
         maxDepthToSearchBlocksBelowIndexActivation = 4_320; // 30 days in BTC blocks (considering 1 block every 10 minutes)
 
-        erpFedActivationDelay = 720; // 1 year in BTC blocks (considering 1 block every 10 minutes)
+        erpFedActivationDelay = 180; // 3 hours in BTC blocks (considering 1 block every 10 minutes)
 
         erpFedPubKeysList = Arrays.stream(new String[] {
             "03b9fc46657cf72a1afa007ecf431de1cd27ff5cc8829fa625b66ca47b967e6b24",
@@ -159,10 +164,7 @@ public class BridgeTestNetConstants extends BridgeConstants {
 
         maxInputsPerPegoutTransaction = 5;
 
-        numberOfBlocksBetweenPegouts = 20; // 3 hours of RSK blocks (considering 1 block every 30 seconds)
-
-        /*btcHeightWhenPegoutTxIndexActivates = 150; // TODO: TBD and change current mock value. This is an estimation of the btc block number once RSKIP379 is activated.
-        pegoutTxIndexGracePeriodInBtcBlocks = 4_320; // 30 days in BTC blocks (considering 1 block every 10 minutes)*/
+        numberOfBlocksBetweenPegouts = 20; // 10 minutes of RSK blocks (considering 1 block every 30 seconds)
     }
 
     public static BridgeTestNetConstants getInstance() {
