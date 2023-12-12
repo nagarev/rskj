@@ -58,9 +58,8 @@ public class BridgeTestNetConstants extends BridgeConstants {
         // Change upon implementation of the <INSERT FORK NAME HERE> fork.
         List<FederationMember> federationMembers = FederationMember.getFederationMembersFromKeys(genesisFederationPublicKeys);
 
-        // Currently set to:
-        // Currently set to: Monday, October 8, 2018 12:00:00 AM GMT-03:00
-        Instant genesisFederationAddressCreatedAt = Instant.ofEpochMilli(1652990225L);
+        // Currently set to: Monday, October 30, 2023 10:35:51 PM GMT-04:00
+        Instant genesisFederationAddressCreatedAt = Instant.ofEpochMilli(1698719751L);
 
         genesisFederation = new StandardMultisigFederation(
             federationMembers,
@@ -108,8 +107,8 @@ public class BridgeTestNetConstants extends BridgeConstants {
         federationActivationAge = 20L;
 
         fundsMigrationAgeSinceActivationBegin = 5L;
-        fundsMigrationAgeSinceActivationEnd = 120L;
-        specialCaseFundsMigrationAgeSinceActivationEnd = 160L;
+        fundsMigrationAgeSinceActivationEnd = 180L;
+        specialCaseFundsMigrationAgeSinceActivationEnd = 900L;
 
         List<ECKey> feePerKbAuthorizedKeys = Arrays.stream(new String[]{
             "04701d1d27f8c2ae97912d96fb1f82f10c2395fd320e7a869049268c6b53d2060dfb2e22e3248955332d88cd2ae29a398f8f3858e48dd6d8ffbc37dfd6d1aa4934",
