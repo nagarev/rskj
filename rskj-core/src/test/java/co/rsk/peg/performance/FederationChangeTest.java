@@ -24,6 +24,7 @@ import co.rsk.core.RskAddress;
 import co.rsk.peg.*;
 import co.rsk.peg.federation.FederationMember;
 import co.rsk.peg.federation.PendingFederation;
+import co.rsk.peg.BridgeStorageProvider;
 import org.ethereum.core.Repository;
 import org.ethereum.crypto.ECKey;
 import org.ethereum.crypto.HashUtil;

@@ -2103,7 +2103,7 @@ public class BridgeSupportTestIntegration {
                 null
         );
         ABICallSpec spec = new ABICallSpec("a-random-method", new byte[][]{});
-        Assertions.assertEquals(BridgeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE, bridgeSupport.voteFederationChange(mock(Transaction.class), spec));
+        Assertions.assertEquals(FederationChangeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE, bridgeSupport.voteFederationChange(mock(Transaction.class), spec));
     }
 
     @Test
@@ -2120,7 +2120,7 @@ public class BridgeSupportTestIntegration {
         ABICallSpec spec = new ABICallSpec("create", new byte[][]{});
         Transaction mockedTx = mock(Transaction.class);
         when(mockedTx.getSender(any(SignatureCache.class))).thenReturn(new RskAddress(ECKey.fromPrivate(BigInteger.valueOf(12L)).getAddress()));
-        Assertions.assertEquals(BridgeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE, bridgeSupport.voteFederationChange(mockedTx, spec));
+        Assertions.assertEquals(FederationChangeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE, bridgeSupport.voteFederationChange(mockedTx, spec));
     }
 
     private class VotingMocksProvider {
@@ -2482,7 +2482,7 @@ public class BridgeSupportTestIntegration {
         );
 
         Assertions.assertNull(bridgeSupport.getPendingFederationHash());
-        Assertions.assertEquals(BridgeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE.intValue(), mocksProvider.execute(bridgeSupport));
+        Assertions.assertEquals(FederationChangeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE.intValue(), mocksProvider.execute(bridgeSupport));
         Assertions.assertNull(bridgeSupport.getPendingFederationHash());
         verify(mocksProvider.getElection(), never()).clearWinners();
         verify(mocksProvider.getElection(), never()).clear();
@@ -2710,7 +2710,7 @@ public class BridgeSupportTestIntegration {
         );
 
         Assertions.assertNull(bridgeSupport.getPendingFederationHash());
-        Assertions.assertEquals(BridgeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE.intValue(), mocksProvider.execute(bridgeSupport));
+        Assertions.assertEquals(FederationChangeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE.intValue(), mocksProvider.execute(bridgeSupport));
         Assertions.assertNull(bridgeSupport.getPendingFederationHash());
         verify(mocksProvider.getElection(), never()).clearWinners();
         verify(mocksProvider.getElection(), never()).clear();
@@ -2736,7 +2736,7 @@ public class BridgeSupportTestIntegration {
         );
 
         Assertions.assertNull(bridgeSupport.getPendingFederationHash());
-        Assertions.assertEquals(BridgeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE.intValue(), mocksProvider.execute(bridgeSupport));
+        Assertions.assertEquals(FederationChangeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE.intValue(), mocksProvider.execute(bridgeSupport));
         Assertions.assertNull(bridgeSupport.getPendingFederationHash());
         verify(mocksProvider.getElection(), never()).clearWinners();
         verify(mocksProvider.getElection(), never()).clear();
@@ -2762,7 +2762,7 @@ public class BridgeSupportTestIntegration {
         );
 
         Assertions.assertNull(bridgeSupport.getPendingFederationHash());
-        Assertions.assertEquals(BridgeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE.intValue(), mocksProvider.execute(bridgeSupport));
+        Assertions.assertEquals(FederationChangeSupport.FEDERATION_CHANGE_GENERIC_ERROR_CODE.intValue(), mocksProvider.execute(bridgeSupport));
         Assertions.assertNull(bridgeSupport.getPendingFederationHash());
         verify(mocksProvider.getElection(), never()).clearWinners();
         verify(mocksProvider.getElection(), never()).clear();
@@ -3192,7 +3192,7 @@ public class BridgeSupportTestIntegration {
         LockWhitelist mockedWhitelist = mock(LockWhitelist.class);
         BridgeSupport bridgeSupport = getBridgeSupportWithMocksForWhitelistTests(mockedWhitelist);
 
-        Assertions.assertEquals(BridgeSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), bridgeSupport.addOneOffLockWhitelistAddress(mockedTx, "mwKcYS3H8FUgrPtyGMv3xWvf4jgeZUkCYN", BigInteger.valueOf(Coin.COIN.getValue())).intValue());
+        Assertions.assertEquals(LockWhitelistSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), bridgeSupport.addOneOffLockWhitelistAddress(mockedTx, "mwKcYS3H8FUgrPtyGMv3xWvf4jgeZUkCYN", BigInteger.valueOf(Coin.COIN.getValue())).intValue());
         verify(mockedWhitelist, never()).put(any(), any());
     }
 
@@ -3422,7 +3422,7 @@ public class BridgeSupportTestIntegration {
         LockWhitelist mockedWhitelist = mock(LockWhitelist.class);
         BridgeSupport bridgeSupport = getBridgeSupportWithMocksForWhitelistTests(mockedWhitelist);
 
-        Assertions.assertEquals(BridgeSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), bridgeSupport.removeLockWhitelistAddress(mockedTx, "mwKcYS3H8FUgrPtyGMv3xWvf4jgeZUkCYN").intValue());
+        Assertions.assertEquals(LockWhitelistSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), bridgeSupport.removeLockWhitelistAddress(mockedTx, "mwKcYS3H8FUgrPtyGMv3xWvf4jgeZUkCYN").intValue());
         verify(mockedWhitelist, never()).remove(any());
     }
 

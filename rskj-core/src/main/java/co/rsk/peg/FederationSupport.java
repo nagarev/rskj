@@ -17,18 +17,22 @@
  */
 package co.rsk.peg;
 
+import co.rsk.bitcoinj.core.Address;
 import co.rsk.bitcoinj.core.BtcECKey;
 import co.rsk.bitcoinj.core.UTXO;
 import co.rsk.config.BridgeConstants;
 import co.rsk.peg.federation.Federation;
 import co.rsk.peg.federation.FederationMember;
+import co.rsk.peg.federation.PendingFederation;
 import org.ethereum.config.blockchain.upgrades.ActivationConfig;
 import org.ethereum.core.Block;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public class FederationSupport {
 
@@ -47,11 +51,61 @@ public class FederationSupport {
     }
 
     /**
+     * Returns the currently active federation.
+     * See getActiveFederationReference() for details.
+     *
+     * @return the currently active federation.
+     */
+    public Federation getActiveFederation() {
+        switch (getActiveFederationReference()) {
+            case NEW:
+                return provider.getNewFederation();
+            case OLD:
+                return provider.getOldFederation();
+            case GENESIS:
+            default:
+                return bridgeConstants.getGenesisFederation();
+        }
+    }
+
+    /**
+     * Returns the federation bitcoin address.
+     * @return the federation bitcoin address.
+     */
+    public Address getFederationAddress() {
+        return getActiveFederation().getAddress();
+    }
+
+    /**
      * Returns the federation's size
      * @return the federation size
      */
     public int getFederationSize() {
         return getActiveFederation().getBtcPublicKeys().size();
+    }
+
+    /**
+     * Returns the federation's minimum required signatures
+     * @return the federation minimum required signatures
+     */
+    public Integer getFederationThreshold() {
+        return getActiveFederation().getNumberOfSignaturesRequired();
+    }
+
+    /**
+     * Returns the federation's creation time
+     * @return the federation creation time
+     */
+    public Instant getFederationCreationTime() {
+        return getActiveFederation().getCreationTime();
+    }
+
+    /**
+     * Returns the federation's creation block number
+     * @return the federation creation block number
+     */
+    public long getFederationCreationBlockNumber() {
+        return getActiveFederation().getCreationBlockNumber();
     }
 
     /**
@@ -96,21 +150,14 @@ public class FederationSupport {
         return members.get(index).getPublicKey(keyType).getPubKey(true);
     }
 
-    /**
-     * Returns the currently active federation.
-     * See getActiveFederationReference() for details.
-     *
-     * @return the currently active federation.
-     */
-    public Federation getActiveFederation() {
+    public List<UTXO> getActiveFederationBtcUTXOs() throws IOException {
         switch (getActiveFederationReference()) {
-            case NEW:
-                return provider.getNewFederation();
             case OLD:
-                return provider.getOldFederation();
+                return provider.getOldFederationBtcUTXOs();
+            case NEW:
             case GENESIS:
             default:
-                return bridgeConstants.getGenesisFederation();
+                return provider.getNewFederationBtcUTXOs();
         }
     }
 
@@ -131,15 +178,104 @@ public class FederationSupport {
         }
     }
 
-    public List<UTXO> getActiveFederationBtcUTXOs() throws IOException {
-        switch (getActiveFederationReference()) {
-            case OLD:
-                return provider.getOldFederationBtcUTXOs();
-            case NEW:
-            case GENESIS:
-            default:
-                return provider.getNewFederationBtcUTXOs();
+    /**
+     * Returns the retiring federation bitcoin address.
+     * @return the retiring federation bitcoin address, null if no retiring federation exists
+     */
+    public Address getRetiringFederationAddress() {
+        Federation retiringFederation = getRetiringFederation();
+        if (retiringFederation == null) {
+            return null;
         }
+
+        return retiringFederation.getAddress();
+    }
+
+    /**
+     * Returns the retiring federation's size
+     * @return the retiring federation size, -1 if no retiring federation exists
+     */
+    public Integer getRetiringFederationSize() {
+        Federation retiringFederation = getRetiringFederation();
+        if (retiringFederation == null) {
+            return -1;
+        }
+
+        return retiringFederation.getBtcPublicKeys().size();
+    }
+
+    /**
+     * Returns the retiring federation's minimum required signatures
+     * @return the retiring federation minimum required signatures, -1 if no retiring federation exists
+     */
+    public Integer getRetiringFederationThreshold() {
+        Federation retiringFederation = getRetiringFederation();
+        if (retiringFederation == null) {
+            return -1;
+        }
+
+        return retiringFederation.getNumberOfSignaturesRequired();
+    }
+
+    /**
+     * Returns the retiring federation's creation time
+     * @return the retiring federation creation time, null if no retiring federation exists
+     */
+    public Instant getRetiringFederationCreationTime() {
+        Federation retiringFederation = getRetiringFederation();
+        if (retiringFederation == null) {
+            return null;
+        }
+
+        return retiringFederation.getCreationTime();
+    }
+
+    /**
+     * Returns the retiring federation's creation block number
+     * @return the retiring federation creation block number,
+     * -1 if no retiring federation exists
+     */
+    public long getRetiringFederationCreationBlockNumber() {
+        Federation retiringFederation = getRetiringFederation();
+        if (retiringFederation == null) {
+            return -1L;
+        }
+        return retiringFederation.getCreationBlockNumber();
+    }
+
+    /**
+     * Returns the public key of the retiring federation's federator at the given index
+     * @param index the retiring federator's index (zero-based)
+     * @return the retiring federator's public key, null if no retiring federation exists
+     */
+    public byte[] getRetiringFederatorPublicKey(int index) {
+        Federation retiringFederation = getRetiringFederation();
+        if (retiringFederation == null) {
+            return null;
+        }
+
+        List<BtcECKey> publicKeys = retiringFederation.getBtcPublicKeys();
+
+        if (index < 0 || index >= publicKeys.size()) {
+            throw new IndexOutOfBoundsException(String.format("Retiring federator index must be between 0 and %d", publicKeys.size() - 1));
+        }
+
+        return publicKeys.get(index).getPubKey();
+    }
+
+    /**
+     * Returns the public key of the given type of the retiring federation's federator at the given index
+     * @param index the retiring federator's index (zero-based)
+     * @param keyType the key type
+     * @return the retiring federator's public key of the given type, null if no retiring federation exists
+     */
+    public byte[] getRetiringFederatorPublicKeyOfType(int index, FederationMember.KeyType keyType) {
+        Federation retiringFederation = getRetiringFederation();
+        if (retiringFederation == null) {
+            return null;
+        }
+
+        return getMemberPublicKeyOfType(retiringFederation.getMembers(), index, keyType, "Retiring federator");
     }
 
     public List<UTXO> getRetiringFederationBtcUTXOs() throws IOException {
@@ -150,6 +286,85 @@ public class FederationSupport {
             default:
                 return Collections.emptyList();
         }
+    }
+
+    /**
+     * Returns the currently pending federation hash, or null if none exists
+     * @return the currently pending federation hash, or null if none exists
+     */
+    public byte[] getPendingFederationHash() {
+        PendingFederation currentPendingFederation = provider.getPendingFederation();
+
+        if (currentPendingFederation == null) {
+            return null;
+        }
+
+        return currentPendingFederation.getHash().getBytes();
+    }
+
+    /**
+     * Returns the currently pending federation size, or -1 if none exists
+     * @return the currently pending federation size, or -1 if none exists
+     */
+    public Integer getPendingFederationSize() {
+        PendingFederation currentPendingFederation = provider.getPendingFederation();
+
+        if (currentPendingFederation == null) {
+            return -1;
+        }
+
+        return currentPendingFederation.getBtcPublicKeys().size();
+    }
+
+    /**
+     * Returns the currently pending federation federator's public key at the given index, or null if none exists
+     * @param index the federator's index (zero-based)
+     * @return the pending federation's federator public key
+     */
+    public byte[] getPendingFederatorPublicKey(int index) {
+        PendingFederation currentPendingFederation = provider.getPendingFederation();
+
+        if (currentPendingFederation == null) {
+            return null;
+        }
+
+        List<BtcECKey> publicKeys = currentPendingFederation.getBtcPublicKeys();
+
+        if (index < 0 || index >= publicKeys.size()) {
+            throw new IndexOutOfBoundsException(String.format("Federator index must be between 0 and %d", publicKeys.size() - 1));
+        }
+
+        return publicKeys.get(index).getPubKey();
+    }
+
+    /**
+     * Returns the public key of the given type of the pending federation's federator at the given index
+     * @param index the federator's index (zero-based)
+     * @param keyType the key type
+     * @return the pending federation's federator public key of given type
+     */
+    public byte[] getPendingFederatorPublicKeyOfType(int index, FederationMember.KeyType keyType) {
+        PendingFederation currentPendingFederation = provider.getPendingFederation();
+
+        if (currentPendingFederation == null) {
+            return null;
+        }
+
+        return getMemberPublicKeyOfType(currentPendingFederation.getMembers(), index, keyType, "Federator");
+    }
+
+    protected Optional<Federation> getFederationFromPublicKey(BtcECKey federatorPublicKey) {
+        Federation retiringFederation = getRetiringFederation();
+        Federation activeFederation = getActiveFederation();
+
+        if (activeFederation.hasBtcPublicKey(federatorPublicKey)) {
+            return Optional.of(activeFederation);
+        }
+        if (retiringFederation != null && retiringFederation.hasBtcPublicKey(federatorPublicKey)) {
+            return Optional.of(retiringFederation);
+        }
+
+        return Optional.empty();
     }
 
     public boolean amAwaitingFederationActivation() {

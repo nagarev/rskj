@@ -25,10 +25,8 @@ import static org.ethereum.config.blockchain.upgrades.ConsensusRule.RSKIP219;
 import static org.ethereum.config.blockchain.upgrades.ConsensusRule.RSKIP271;
 import static org.ethereum.config.blockchain.upgrades.ConsensusRule.RSKIP293;
 import static org.ethereum.config.blockchain.upgrades.ConsensusRule.RSKIP294;
-import static org.ethereum.config.blockchain.upgrades.ConsensusRule.RSKIP377;
 
 import co.rsk.bitcoinj.core.Address;
-import co.rsk.bitcoinj.core.AddressFormatException;
 import co.rsk.bitcoinj.core.BtcBlock;
 import co.rsk.bitcoinj.core.BtcBlockChain;
 import co.rsk.bitcoinj.core.BtcECKey;
@@ -79,8 +77,6 @@ import co.rsk.peg.utils.RejectedPegoutReason;
 import co.rsk.peg.utils.UnrefundablePeginReason;
 import co.rsk.peg.whitelist.LockWhitelist;
 import co.rsk.peg.whitelist.LockWhitelistEntry;
-import co.rsk.peg.whitelist.OneOffWhiteListEntry;
-import co.rsk.peg.whitelist.UnlimitedWhiteListEntry;
 import co.rsk.rpc.modules.trace.CallType;
 import co.rsk.rpc.modules.trace.ProgramSubtrace;
 import com.google.common.annotations.VisibleForTesting;
@@ -105,7 +101,6 @@ import org.ethereum.core.Block;
 import org.ethereum.core.Repository;
 import org.ethereum.core.SignatureCache;
 import org.ethereum.core.Transaction;
-import org.ethereum.crypto.ECKey;
 import org.ethereum.crypto.HashUtil;
 import org.ethereum.util.ByteUtil;
 import org.ethereum.vm.DataWord;
@@ -127,16 +122,6 @@ public class BridgeSupport {
 
     public static final int MAX_RELEASE_ITERATIONS = 30;
 
-    public static final Integer FEDERATION_CHANGE_GENERIC_ERROR_CODE = -10;
-    public static final Integer LOCK_WHITELIST_GENERIC_ERROR_CODE = -10;
-    public static final Integer LOCK_WHITELIST_INVALID_ADDRESS_FORMAT_ERROR_CODE = -2;
-    public static final Integer LOCK_WHITELIST_ALREADY_EXISTS_ERROR_CODE = -1;
-    public static final Integer LOCK_WHITELIST_UNKNOWN_ERROR_CODE = 0;
-    public static final Integer LOCK_WHITELIST_SUCCESS_CODE = 1;
-    public static final Integer FEE_PER_KB_GENERIC_ERROR_CODE = -10;
-    public static final Integer NEGATIVE_FEE_PER_KB_ERROR_CODE = -1;
-    public static final Integer EXCESSIVE_FEE_PER_KB_ERROR_CODE = -2;
-
     public static final Integer BTC_TRANSACTION_CONFIRMATION_INEXISTENT_BLOCK_HASH_ERROR_CODE = -1;
     public static final Integer BTC_TRANSACTION_CONFIRMATION_BLOCK_NOT_IN_BEST_CHAIN_ERROR_CODE = -2;
     public static final Integer BTC_TRANSACTION_CONFIRMATION_INCONSISTENT_BLOCK_ERROR_CODE = -3;
@@ -156,15 +141,10 @@ public class BridgeSupport {
     private static final Logger logger = LoggerFactory.getLogger("BridgeSupport");
     private static final PanicProcessor panicProcessor = new PanicProcessor();
 
-    private static final String INVALID_ADDRESS_FORMAT_MESSAGE = "invalid address format";
+    private final FeePerKbSupport feePerKbSupport;
+    private final FederationChangeSupport federationChangeSupport;
 
-    private static final List<String> FEDERATION_CHANGE_FUNCTIONS = Collections.unmodifiableList(Arrays.asList(
-        "create",
-        "add",
-        "add-multi",
-        "commit",
-        "rollback"
-    ));
+    private final LockWhitelistSupport lockWhitelistSupport;
 
     private final BridgeConstants bridgeConstants;
     private final BridgeStorageProvider provider;
@@ -210,6 +190,9 @@ public class BridgeSupport {
         this.btcBlockStoreFactory = btcBlockStoreFactory;
         this.activations = activations;
         this.signatureCache = signatureCache;
+        this.feePerKbSupport = new FeePerKbSupport(bridgeConstants, provider);
+        this.federationChangeSupport = new FederationChangeSupport(bridgeConstants, provider, federationSupport, rskExecutionBlock, activations, eventLogger);
+        this.lockWhitelistSupport = new LockWhitelistSupport(bridgeConstants, provider, signatureCache);
     }
 
     public List<ProgramSubtrace> getSubtraces() {
@@ -947,13 +930,7 @@ public class BridgeSupport {
      * @return Current fee per kb in BTC.
      */
     public Coin getFeePerKb() {
-        Coin currentFeePerKb = provider.getFeePerKb();
-
-        if (currentFeePerKb == null) {
-            currentFeePerKb = bridgeConstants.getGenesisFeePerKb();
-        }
-
-        return currentFeePerKb;
+        return feePerKbSupport.getFeePerKb();
     }
 
     /**
@@ -1461,17 +1438,7 @@ public class BridgeSupport {
     }
 
     private Optional<Federation> getFederationFromPublicKey(BtcECKey federatorPublicKey) {
-        Federation retiringFederation = getRetiringFederation();
-        Federation activeFederation = getActiveFederation();
-
-        if (activeFederation.hasBtcPublicKey(federatorPublicKey)) {
-            return Optional.of(activeFederation);
-        }
-        if (retiringFederation != null && retiringFederation.hasBtcPublicKey(federatorPublicKey)) {
-            return Optional.of(retiringFederation);
-        }
-
-        return Optional.empty();
+        return federationSupport.getFederationFromPublicKey(federatorPublicKey);
     }
 
     private void processSigning(
@@ -1859,20 +1826,10 @@ public class BridgeSupport {
         return false;
     }
 
-    /**
-     * Returns the currently active federation.
-     * See getActiveFederationReference() for details.
-     * @return the currently active federation.
-     */
     public Federation getActiveFederation() {
         return federationSupport.getActiveFederation();
     }
 
-    /**
-     * Returns the currently retiring federation.
-     * See getRetiringFederationReference() for details.
-     * @return the retiring federation.
-     */
     @Nullable
     public Federation getRetiringFederation() {
         return federationSupport.getRetiringFederation();
@@ -1886,163 +1843,60 @@ public class BridgeSupport {
         return federationSupport.getRetiringFederationBtcUTXOs();
     }
 
-    /**
-     * Returns the federation bitcoin address.
-     * @return the federation bitcoin address.
-     */
     public Address getFederationAddress() {
-        return getActiveFederation().getAddress();
+        return federationSupport.getFederationAddress();
     }
 
-    /**
-     * Returns the federation's size
-     * @return the federation size
-     */
     public Integer getFederationSize() {
-        return getActiveFederation().getBtcPublicKeys().size();
+        return federationSupport.getFederationSize();
     }
 
-    /**
-     * Returns the federation's minimum required signatures
-     * @return the federation minimum required signatures
-     */
     public Integer getFederationThreshold() {
-        return getActiveFederation().getNumberOfSignaturesRequired();
+        return federationSupport.getFederationThreshold();
     }
 
-    /**
-     * Returns the public key of the federation's federator at the given index
-     * @param index the federator's index (zero-based)
-     * @return the federator's public key
-     */
+    public Instant getFederationCreationTime() {
+        return federationSupport.getFederationCreationTime();
+    }
+
+    public long getFederationCreationBlockNumber() {
+        return federationSupport.getFederationCreationBlockNumber();
+    }
+
     public byte[] getFederatorPublicKey(int index) {
         return federationSupport.getFederatorBtcPublicKey(index);
     }
 
-    /**
-     * Returns the public key of given type of the federation's federator at the given index
-     * @param index the federator's index (zero-based)
-     * @param keyType the key type
-     * @return the federator's public key
-     */
     public byte[] getFederatorPublicKeyOfType(int index, FederationMember.KeyType keyType) {
         return federationSupport.getFederatorPublicKeyOfType(index, keyType);
     }
 
-    /**
-     * Returns the federation's creation time
-     * @return the federation creation time
-     */
-    public Instant getFederationCreationTime() {
-        return getActiveFederation().getCreationTime();
-    }
-
-    /**
-     * Returns the federation's creation block number
-     * @return the federation creation block number
-     */
-    public long getFederationCreationBlockNumber() {
-        return getActiveFederation().getCreationBlockNumber();
-    }
-
-    /**
-     * Returns the retiring federation bitcoin address.
-     * @return the retiring federation bitcoin address, null if no retiring federation exists
-     */
     public Address getRetiringFederationAddress() {
-        Federation retiringFederation = getRetiringFederation();
-        if (retiringFederation == null) {
-            return null;
-        }
-
-        return retiringFederation.getAddress();
+        return federationSupport.getRetiringFederationAddress();
     }
 
-    /**
-     * Returns the retiring federation's size
-     * @return the retiring federation size, -1 if no retiring federation exists
-     */
     public Integer getRetiringFederationSize() {
-        Federation retiringFederation = getRetiringFederation();
-        if (retiringFederation == null) {
-            return -1;
-        }
-
-        return retiringFederation.getBtcPublicKeys().size();
+        return federationSupport.getRetiringFederationSize();
     }
 
-    /**
-     * Returns the retiring federation's minimum required signatures
-     * @return the retiring federation minimum required signatures, -1 if no retiring federation exists
-     */
     public Integer getRetiringFederationThreshold() {
-        Federation retiringFederation = getRetiringFederation();
-        if (retiringFederation == null) {
-            return -1;
-        }
-
-        return retiringFederation.getNumberOfSignaturesRequired();
+        return federationSupport.getRetiringFederationThreshold();
     }
 
-    /**
-     * Returns the public key of the retiring federation's federator at the given index
-     * @param index the retiring federator's index (zero-based)
-     * @return the retiring federator's public key, null if no retiring federation exists
-     */
     public byte[] getRetiringFederatorPublicKey(int index) {
-        Federation retiringFederation = getRetiringFederation();
-        if (retiringFederation == null) {
-            return null;
-        }
-
-        List<BtcECKey> publicKeys = retiringFederation.getBtcPublicKeys();
-
-        if (index < 0 || index >= publicKeys.size()) {
-            throw new IndexOutOfBoundsException(String.format("Retiring federator index must be between 0 and %d", publicKeys.size() - 1));
-        }
-
-        return publicKeys.get(index).getPubKey();
+        return federationSupport.getRetiringFederatorPublicKey(index);
     }
 
-    /**
-     * Returns the public key of the given type of the retiring federation's federator at the given index
-     * @param index the retiring federator's index (zero-based)
-     * @param keyType the key type
-     * @return the retiring federator's public key of the given type, null if no retiring federation exists
-     */
     public byte[] getRetiringFederatorPublicKeyOfType(int index, FederationMember.KeyType keyType) {
-        Federation retiringFederation = getRetiringFederation();
-        if (retiringFederation == null) {
-            return null;
-        }
-
-        return federationSupport.getMemberPublicKeyOfType(retiringFederation.getMembers(), index, keyType, "Retiring federator");
+        return federationSupport.getRetiringFederatorPublicKeyOfType(index, keyType);
     }
 
-    /**
-     * Returns the retiring federation's creation time
-     * @return the retiring federation creation time, null if no retiring federation exists
-     */
     public Instant getRetiringFederationCreationTime() {
-        Federation retiringFederation = getRetiringFederation();
-        if (retiringFederation == null) {
-            return null;
-        }
-
-        return retiringFederation.getCreationTime();
+        return federationSupport.getRetiringFederationCreationTime();
     }
 
-    /**
-     * Returns the retiring federation's creation block number
-     * @return the retiring federation creation block number,
-     * -1 if no retiring federation exists
-     */
     public long getRetiringFederationCreationBlockNumber() {
-        Federation retiringFederation = getRetiringFederation();
-        if (retiringFederation == null) {
-            return -1L;
-        }
-        return retiringFederation.getCreationBlockNumber();
+        return federationSupport.getRetiringFederationCreationBlockNumber();
     }
 
     /**
@@ -2061,568 +1915,63 @@ public class BridgeSupport {
         return liveFederations;
     }
 
-    /**
-     * Creates a new pending federation
-     * If there's currently no pending federation and no funds remain
-     * to be moved from a previous federation, a new one is created.
-     * Otherwise, -1 is returned if there's already a pending federation,
-     * -2 is returned if there is a federation awaiting to be active,
-     * or -3 if funds are left from a previous one.
-     * @param dryRun whether to just do a dry run
-     * @return 1 upon success, -1 when a pending federation is present,
-     * -2 when a federation is to be activated,
-     * and if -3 funds are still to be moved between federations.
-     */
-    private Integer createFederation(boolean dryRun) {
-        PendingFederation currentPendingFederation = provider.getPendingFederation();
-
-        if (currentPendingFederation != null) {
-            return -1;
-        }
-
-        if (federationSupport.amAwaitingFederationActivation()) {
-            return -2;
-        }
-
-        if (getRetiringFederation() != null) {
-            return -3;
-        }
-
-        if (dryRun) {
-            return 1;
-        }
-
-        currentPendingFederation = new PendingFederation(Collections.emptyList());
-
-        provider.setPendingFederation(currentPendingFederation);
-
-        // Clear votes on election
-        provider.getFederationElection(bridgeConstants.getFederationChangeAuthorizer()).clear();
-
-        return 1;
-    }
-
-    /**
-     * Adds the given keys to the current pending federation.
-     *
-     * @param dryRun whether to just do a dry run
-     * @param btcKey the BTC public key to add
-     * @param rskKey the RSK public key to add
-     * @param mstKey the MST public key to add
-     * @return 1 upon success, -1 if there was no pending federation, -2 if the key was already in the pending federation
-     */
-    private Integer addFederatorPublicKeyMultikey(boolean dryRun, BtcECKey btcKey, ECKey rskKey, ECKey mstKey) {
-        PendingFederation currentPendingFederation = provider.getPendingFederation();
-
-        if (currentPendingFederation == null) {
-            return -1;
-        }
-
-        if (currentPendingFederation.getBtcPublicKeys().contains(btcKey) ||
-            currentPendingFederation.getMembers().stream().map(FederationMember::getRskPublicKey).anyMatch(k -> k.equals(rskKey)) ||
-            currentPendingFederation.getMembers().stream().map(FederationMember::getMstPublicKey).anyMatch(k -> k.equals(mstKey))) {
-            return -2;
-        }
-
-        if (dryRun) {
-            return 1;
-        }
-
-        FederationMember member = new FederationMember(btcKey, rskKey, mstKey);
-
-        currentPendingFederation = currentPendingFederation.addMember(member);
-
-        provider.setPendingFederation(currentPendingFederation);
-
-        return 1;
-    }
-
-    /**
-     * Commits the currently pending federation.
-     * That is, the retiring federation is set to be the currently active federation,
-     * the active federation is replaced with a new federation generated from the pending federation,
-     * and the pending federation is wiped out.
-     * Also, UTXOs are moved from active to retiring so that the transfer of funds can
-     * begin.
-     * @param dryRun whether to just do a dry run
-     * @param hash the pending federation's hash. This is checked the execution block's pending federation hash for equality.
-     * @return 1 upon success, -1 if there was no pending federation, -2 if the pending federation was incomplete,
-     * -3 if the given hash doesn't match the current pending federation's hash.
-     */
     protected Integer commitFederation(boolean dryRun, Keccak256 hash) throws IOException {
-        PendingFederation currentPendingFederation = provider.getPendingFederation();
-
-        if (currentPendingFederation == null) {
-            return -1;
-        }
-
-        if (!currentPendingFederation.isComplete()) {
-            return -2;
-        }
-
-        if (!hash.equals(currentPendingFederation.getHash())) {
-            return -3;
-        }
-
-        if (dryRun) {
-            return 1;
-        }
-
-        // Move UTXOs from the new federation into the old federation
-        // and clear the new federation's UTXOs
-        List<UTXO> utxosToMove = new ArrayList<>(provider.getNewFederationBtcUTXOs());
-        provider.getNewFederationBtcUTXOs().clear();
-        List<UTXO> oldFederationUTXOs = provider.getOldFederationBtcUTXOs();
-        oldFederationUTXOs.clear();
-        oldFederationUTXOs.addAll(utxosToMove);
-
-        // Network parameters for the new federation are taken from the bridge constants.
-        // Creation time is the block's timestamp.
-        Instant creationTime = Instant.ofEpochMilli(rskExecutionBlock.getTimestamp());
-        Federation oldFederation = getActiveFederation();
-        provider.setOldFederation(oldFederation);
-        provider.setNewFederation(
-            currentPendingFederation.buildFederation(
-                creationTime,
-                rskExecutionBlock.getNumber(),
-                bridgeConstants,
-                activations
-            )
-        );
-        provider.setPendingFederation(null);
-
-        // Clear votes on election
-        provider.getFederationElection(bridgeConstants.getFederationChangeAuthorizer()).clear();
-
-        if (activations.isActive(RSKIP186)) {
-            // Preserve federation change info
-            long nextFederationCreationBlockHeight = rskExecutionBlock.getNumber();
-            provider.setNextFederationCreationBlockHeight(nextFederationCreationBlockHeight);
-            Script oldFederationP2SHScript = activations.isActive(RSKIP377) && oldFederation instanceof ErpFederation ?
-                ((ErpFederation) oldFederation).getDefaultP2SHScript() : oldFederation.getP2SHScript();
-            provider.setLastRetiredFederationP2SHScript(oldFederationP2SHScript);
-        }
-
-        logger.debug("[commitFederation] New Federation committed: {}", provider.getNewFederation().getAddress());
-        eventLogger.logCommitFederation(rskExecutionBlock, provider.getOldFederation(), provider.getNewFederation());
-
-        return 1;
-    }
-
-    /**
-     * Rolls back the currently pending federation
-     * That is, the pending federation is wiped out.
-     * @param dryRun whether to just do a dry run
-     * @return 1 upon success, 1 if there was no pending federation
-     */
-    private Integer rollbackFederation(boolean dryRun) {
-        PendingFederation currentPendingFederation = provider.getPendingFederation();
-
-        if (currentPendingFederation == null) {
-            return -1;
-        }
-
-        if (dryRun) {
-            return 1;
-        }
-
-        provider.setPendingFederation(null);
-
-        // Clear votes on election
-        provider.getFederationElection(bridgeConstants.getFederationChangeAuthorizer()).clear();
-
-        return 1;
+        return federationChangeSupport.commitFederation(dryRun, hash);
     }
 
     public Integer voteFederationChange(Transaction tx, ABICallSpec callSpec) throws BridgeIllegalArgumentException {
-        // Must be on one of the allowed functions
-        if (!FEDERATION_CHANGE_FUNCTIONS.contains(callSpec.getFunction())) {
-            return FEDERATION_CHANGE_GENERIC_ERROR_CODE;
-        }
-
-        AddressBasedAuthorizer authorizer = bridgeConstants.getFederationChangeAuthorizer();
-
-        // Must be authorized to vote (checking for signature)
-        if (!authorizer.isAuthorized(tx, signatureCache)) {
-            return FEDERATION_CHANGE_GENERIC_ERROR_CODE;
-        }
-
-        // Try to do a dry-run and only register the vote if the
-        // call would be successful
-        ABICallVoteResult result;
-        try {
-            result = executeVoteFederationChangeFunction(true, callSpec);
-        } catch (IOException | BridgeIllegalArgumentException e) {
-            result = new ABICallVoteResult(false, FEDERATION_CHANGE_GENERIC_ERROR_CODE);
-        }
-
-        // Return if the dry run failed, or we are on a reversible execution
-        if (!result.wasSuccessful()) {
-            return (Integer) result.getResult();
-        }
-
-        ABICallElection election = provider.getFederationElection(authorizer);
-        // Register the vote. It is expected to succeed, since all previous checks succeeded
-        if (!election.vote(callSpec, tx.getSender(signatureCache))) {
-            logger.warn("Unexpected federation change vote failure");
-            return FEDERATION_CHANGE_GENERIC_ERROR_CODE;
-        }
-
-        // If enough votes have been reached, then actually execute the function
-        ABICallSpec winnerSpec = election.getWinner();
-        if (winnerSpec != null) {
-            try {
-                result = executeVoteFederationChangeFunction(false, winnerSpec);
-            } catch (IOException e) {
-                logger.warn("Unexpected federation change vote exception: {}", e.getMessage());
-                return FEDERATION_CHANGE_GENERIC_ERROR_CODE;
-            } finally {
-                // Clear the winner so that we don't repeat ourselves
-                election.clearWinners();
-            }
-        }
-
-        return (Integer) result.getResult();
+        return federationChangeSupport.voteFederationChange(tx, callSpec, signatureCache);
     }
 
-    private ABICallVoteResult executeVoteFederationChangeFunction(boolean dryRun, ABICallSpec callSpec) throws IOException, BridgeIllegalArgumentException {
-        // Try to do a dry-run and only register the vote if the
-        // call would be successful
-        ABICallVoteResult result;
-        Integer executionResult;
-        switch (callSpec.getFunction()) {
-            case "create":
-                executionResult = createFederation(dryRun);
-                result = new ABICallVoteResult(executionResult == 1, executionResult);
-                break;
-            case "add":
-                byte[] publicKeyBytes = callSpec.getArguments()[0];
-                BtcECKey publicKey;
-                ECKey publicKeyEc;
-                try {
-                    publicKey = BtcECKey.fromPublicOnly(publicKeyBytes);
-                    publicKeyEc = ECKey.fromPublicOnly(publicKeyBytes);
-                } catch (Exception e) {
-                    throw new BridgeIllegalArgumentException("Public key could not be parsed " + ByteUtil.toHexString(publicKeyBytes), e);
-                }
-                executionResult = addFederatorPublicKeyMultikey(dryRun, publicKey, publicKeyEc, publicKeyEc);
-                result = new ABICallVoteResult(executionResult == 1, executionResult);
-                break;
-            case "add-multi":
-                BtcECKey btcPublicKey;
-                ECKey rskPublicKey;
-                ECKey mstPublicKey;
-                try {
-                    btcPublicKey = BtcECKey.fromPublicOnly(callSpec.getArguments()[0]);
-                } catch (Exception e) {
-                    throw new BridgeIllegalArgumentException("BTC public key could not be parsed " + ByteUtil.toHexString(callSpec.getArguments()[0]), e);
-                }
-
-                try {
-                    rskPublicKey = ECKey.fromPublicOnly(callSpec.getArguments()[1]);
-                } catch (Exception e) {
-                    throw new BridgeIllegalArgumentException("RSK public key could not be parsed " + ByteUtil.toHexString(callSpec.getArguments()[1]), e);
-                }
-
-                try {
-                    mstPublicKey = ECKey.fromPublicOnly(callSpec.getArguments()[2]);
-                } catch (Exception e) {
-                    throw new BridgeIllegalArgumentException("MST public key could not be parsed " + ByteUtil.toHexString(callSpec.getArguments()[2]), e);
-                }
-                executionResult = addFederatorPublicKeyMultikey(dryRun, btcPublicKey, rskPublicKey, mstPublicKey);
-                result = new ABICallVoteResult(executionResult == 1, executionResult);
-                break;
-            case "commit":
-                Keccak256 hash = new Keccak256(callSpec.getArguments()[0]);
-                executionResult = commitFederation(dryRun, hash);
-                result = new ABICallVoteResult(executionResult == 1, executionResult);
-                break;
-            case "rollback":
-                executionResult = rollbackFederation(dryRun);
-                result = new ABICallVoteResult(executionResult == 1, executionResult);
-                break;
-            default:
-                // Fail by default
-                result = new ABICallVoteResult(false, FEDERATION_CHANGE_GENERIC_ERROR_CODE);
-        }
-
-        return result;
-    }
-
-    /**
-     * Returns the currently pending federation hash, or null if none exists
-     * @return the currently pending federation hash, or null if none exists
-     */
     public byte[] getPendingFederationHash() {
-        PendingFederation currentPendingFederation = provider.getPendingFederation();
-
-        if (currentPendingFederation == null) {
-            return null;
-        }
-
-        return currentPendingFederation.getHash().getBytes();
+        return federationSupport.getPendingFederationHash();
     }
 
-    /**
-     * Returns the currently pending federation size, or -1 if none exists
-     * @return the currently pending federation size, or -1 if none exists
-     */
     public Integer getPendingFederationSize() {
-        PendingFederation currentPendingFederation = provider.getPendingFederation();
-
-        if (currentPendingFederation == null) {
-            return -1;
-        }
-
-        return currentPendingFederation.getBtcPublicKeys().size();
+        return federationSupport.getPendingFederationSize();
     }
 
-    /**
-     * Returns the currently pending federation federator's public key at the given index, or null if none exists
-     * @param index the federator's index (zero-based)
-     * @return the pending federation's federator public key
-     */
     public byte[] getPendingFederatorPublicKey(int index) {
-        PendingFederation currentPendingFederation = provider.getPendingFederation();
-
-        if (currentPendingFederation == null) {
-            return null;
-        }
-
-        List<BtcECKey> publicKeys = currentPendingFederation.getBtcPublicKeys();
-
-        if (index < 0 || index >= publicKeys.size()) {
-            throw new IndexOutOfBoundsException(String.format("Federator index must be between 0 and %d", publicKeys.size() - 1));
-        }
-
-        return publicKeys.get(index).getPubKey();
+        return federationSupport.getPendingFederatorPublicKey(index);
     }
 
-    /**
-     * Returns the public key of the given type of the pending federation's federator at the given index
-     * @param index the federator's index (zero-based)
-     * @param keyType the key type
-     * @return the pending federation's federator public key of given type
-     */
     public byte[] getPendingFederatorPublicKeyOfType(int index, FederationMember.KeyType keyType) {
-        PendingFederation currentPendingFederation = provider.getPendingFederation();
-
-        if (currentPendingFederation == null) {
-            return null;
-        }
-
-        return federationSupport.getMemberPublicKeyOfType(currentPendingFederation.getMembers(), index, keyType, "Federator");
+        return federationSupport.getPendingFederatorPublicKeyOfType(index, keyType);
     }
 
-    /**
-     * Returns the lock whitelist size, that is,
-     * the number of whitelisted addresses
-     * @return the lock whitelist size
-     */
     public Integer getLockWhitelistSize() {
-        return provider.getLockWhitelist().getSize();
+        return lockWhitelistSupport.getLockWhitelistSize();
     }
 
-    /**
-     * Returns the lock whitelist address stored
-     * at the given index, or null if the
-     * index is out of bounds
-     * @param index the index at which to get the address
-     * @return the base58-encoded address stored at the given index, or null if index is out of bounds
-     */
     public LockWhitelistEntry getLockWhitelistEntryByIndex(int index) {
-        List<LockWhitelistEntry> entries = provider.getLockWhitelist().getAll();
-
-        if (index < 0 || index >= entries.size()) {
-            return null;
-        }
-
-        return entries.get(index);
+        return lockWhitelistSupport.getLockWhitelistEntryByIndex(index);
     }
 
-    /**
-     *
-     * @param addressBase58
-     * @return
-     */
     public LockWhitelistEntry getLockWhitelistEntryByAddress(String addressBase58) {
-        try {
-            Address address = getParsedAddress(addressBase58);
-            return provider.getLockWhitelist().get(address);
-        } catch (AddressFormatException e) {
-            logger.warn(INVALID_ADDRESS_FORMAT_MESSAGE, e);
-            return null;
-        }
+        return lockWhitelistSupport.getLockWhitelistEntryByAddress(addressBase58);
     }
 
-    /**
-     * Adds the given address to the lock whitelist.
-     * Returns 1 upon success, or -1 if the address was
-     * already in the whitelist.
-     * @param addressBase58 the base58-encoded address to add to the whitelist
-     * @param maxTransferValue the max amount of satoshis enabled to transfer for this address
-     * @return 1 upon success, -1 if the address was already
-     * in the whitelist, -2 if address is invalid
-     * LOCK_WHITELIST_GENERIC_ERROR_CODE otherwise.
-     */
     public Integer addOneOffLockWhitelistAddress(Transaction tx, String addressBase58, BigInteger maxTransferValue) {
-        try {
-            Address address = getParsedAddress(addressBase58);
-            Coin maxTransferValueCoin = Coin.valueOf(maxTransferValue.longValueExact());
-            return this.addLockWhitelistAddress(tx, new OneOffWhiteListEntry(address, maxTransferValueCoin));
-        } catch (AddressFormatException e) {
-            logger.warn(INVALID_ADDRESS_FORMAT_MESSAGE, e);
-            return LOCK_WHITELIST_INVALID_ADDRESS_FORMAT_ERROR_CODE;
-        }
+        return lockWhitelistSupport.addOneOffLockWhitelistAddress(tx, addressBase58, maxTransferValue);
     }
 
     public Integer addUnlimitedLockWhitelistAddress(Transaction tx, String addressBase58) {
-        try {
-            Address address = getParsedAddress(addressBase58);
-            return this.addLockWhitelistAddress(tx, new UnlimitedWhiteListEntry(address));
-        } catch (AddressFormatException e) {
-            logger.warn(INVALID_ADDRESS_FORMAT_MESSAGE, e);
-            return LOCK_WHITELIST_INVALID_ADDRESS_FORMAT_ERROR_CODE;
-        }
+        return lockWhitelistSupport.addUnlimitedLockWhitelistAddress(tx, addressBase58);
     }
 
-    private Integer addLockWhitelistAddress(Transaction tx, LockWhitelistEntry entry) {
-        if (!isLockWhitelistChangeAuthorized(tx)) {
-            return LOCK_WHITELIST_GENERIC_ERROR_CODE;
-        }
-
-        LockWhitelist whitelist = provider.getLockWhitelist();
-
-        try {
-            if (whitelist.isWhitelisted(entry.address())) {
-                return LOCK_WHITELIST_ALREADY_EXISTS_ERROR_CODE;
-            }
-            whitelist.put(entry.address(), entry);
-            return LOCK_WHITELIST_SUCCESS_CODE;
-        } catch (Exception e) {
-            logger.error("Unexpected error in addLockWhitelistAddress: {}", e.getMessage());
-            panicProcessor.panic("lock-whitelist", e.getMessage());
-            return LOCK_WHITELIST_UNKNOWN_ERROR_CODE;
-        }
-    }
-
-    private boolean isLockWhitelistChangeAuthorized(Transaction tx) {
-        AddressBasedAuthorizer authorizer = bridgeConstants.getLockWhitelistChangeAuthorizer();
-
-        return authorizer.isAuthorized(tx, signatureCache);
-    }
-
-    /**
-     * Removes the given address from the lock whitelist.
-     * Returns 1 upon success, or -1 if the address was
-     * not in the whitelist.
-     * @param addressBase58 the base58-encoded address to remove from the whitelist
-     * @return 1 upon success, -1 if the address was not
-     * in the whitelist, -2 if the address is invalid,
-     * LOCK_WHITELIST_GENERIC_ERROR_CODE otherwise.
-     */
     public Integer removeLockWhitelistAddress(Transaction tx, String addressBase58) {
-        if (!isLockWhitelistChangeAuthorized(tx)) {
-            return LOCK_WHITELIST_GENERIC_ERROR_CODE;
-        }
-
-        LockWhitelist whitelist = provider.getLockWhitelist();
-
-        try {
-            Address address = getParsedAddress(addressBase58);
-
-            if (!whitelist.remove(address)) {
-                return -1;
-            }
-
-            return 1;
-        } catch (AddressFormatException e) {
-            return -2;
-        } catch (Exception e) {
-            logger.error("Unexpected error in removeLockWhitelistAddress: {}", e.getMessage());
-            panicProcessor.panic("lock-whitelist", e.getMessage());
-            return 0;
-        }
+        return lockWhitelistSupport.removeLockWhitelistAddress(tx, addressBase58);
     }
 
-    /**
-     * Votes for a fee per kb value.
-     *
-     * @return 1 upon successful vote, -1 when the vote was unsuccessful,
-     * FEE_PER_KB_GENERIC_ERROR_CODE when there was an un expected error.
-     */
-    public Integer voteFeePerKbChange(Transaction tx, Coin feePerKb) {
-        AddressBasedAuthorizer authorizer = bridgeConstants.getFeePerKbChangeAuthorizer();
-        if (!authorizer.isAuthorized(tx, signatureCache)) {
-            return FEE_PER_KB_GENERIC_ERROR_CODE;
-        }
-
-        if(!feePerKb.isPositive()){
-            return NEGATIVE_FEE_PER_KB_ERROR_CODE;
-        }
-
-        if(feePerKb.isGreaterThan(bridgeConstants.getMaxFeePerKb())) {
-            return EXCESSIVE_FEE_PER_KB_ERROR_CODE;
-        }
-
-        ABICallElection feePerKbElection = provider.getFeePerKbElection(authorizer);
-        ABICallSpec feeVote = new ABICallSpec("setFeePerKb", new byte[][]{BridgeSerializationUtils.serializeCoin(feePerKb)});
-        boolean successfulVote = feePerKbElection.vote(feeVote, tx.getSender(signatureCache));
-        if (!successfulVote) {
-            return -1;
-        }
-
-        ABICallSpec winner = feePerKbElection.getWinner();
-        if (winner == null) {
-            logger.info("Successful fee per kb vote for {}", feePerKb);
-            return 1;
-        }
-
-        Coin winnerFee;
-        try {
-            winnerFee = BridgeSerializationUtils.deserializeCoin(winner.getArguments()[0]);
-        } catch (Exception e) {
-            logger.warn("Exception deserializing winner feePerKb", e);
-            return FEE_PER_KB_GENERIC_ERROR_CODE;
-        }
-
-        if (winnerFee == null) {
-            logger.warn("Invalid winner feePerKb: feePerKb can't be null");
-            return FEE_PER_KB_GENERIC_ERROR_CODE;
-        }
-
-        if (!winnerFee.equals(feePerKb)) {
-            logger.debug("Winner fee is different than the last vote: maybe you forgot to clear winners");
-        }
-
-        logger.info("Fee per kb changed to {}", winnerFee);
-        provider.setFeePerKb(winnerFee);
-        feePerKbElection.clear();
-        return 1;
-    }
-
-    /**
-     * Sets a delay in the BTC best chain to disable lock whitelist
-     * @param tx current RSK transaction
-     * @param disableBlockDelayBI block since current BTC best chain height to disable lock whitelist
-     * @return 1 if it was successful, -1 if a delay was already set, -2 if disableBlockDelay contains an invalid value
-     */
     public Integer setLockWhitelistDisableBlockDelay(Transaction tx, BigInteger disableBlockDelayBI) throws IOException, BlockStoreException {
-        if (!isLockWhitelistChangeAuthorized(tx)) {
-            return LOCK_WHITELIST_GENERIC_ERROR_CODE;
-        }
-        LockWhitelist lockWhitelist = provider.getLockWhitelist();
-        if (lockWhitelist.isDisableBlockSet()) {
-            return -1;
-        }
-        int disableBlockDelay = disableBlockDelayBI.intValueExact();
         int bestChainHeight = getBtcBlockchainBestChainHeight();
-        if (disableBlockDelay + bestChainHeight <= bestChainHeight) {
-            return -2;
-        }
-        lockWhitelist.setDisableBlockHeight(bestChainHeight + disableBlockDelay);
-        return 1;
+        return lockWhitelistSupport.setLockWhitelistDisableBlockDelay(tx, disableBlockDelayBI, bestChainHeight);
     }
+
+    public Integer voteFeePerKbChange(Transaction tx, Coin feePerKb) {
+        return feePerKbSupport.voteFeePerKbChange(tx, feePerKb, signatureCache);
+    }
+
 
     public Coin getLockingCap() {
         // Before returning the locking cap, check if it was already set
@@ -3157,14 +2506,14 @@ public class BridgeSupport {
                 }
 
                 List<UTXO> selectedUTXOs = originWallet
-                        .getUTXOProvider().getOpenTransactionOutputs(originWallet.getWatchedAddresses()).stream()
-                        .filter(utxo ->
-                                migrationBtcTx.getInputs().stream().anyMatch(input ->
-                                        input.getOutpoint().getHash().equals(utxo.getHash()) &&
-                                                input.getOutpoint().getIndex() == utxo.getIndex()
-                                )
+                    .getUTXOProvider().getOpenTransactionOutputs(originWallet.getWatchedAddresses()).stream()
+                    .filter(utxo ->
+                        migrationBtcTx.getInputs().stream().anyMatch(input ->
+                            input.getOutpoint().getHash().equals(utxo.getHash()) &&
+                                input.getOutpoint().getIndex() == utxo.getIndex()
                         )
-                        .collect(Collectors.toList());
+                    )
+                    .collect(Collectors.toList());
 
                 return Pair.of(migrationBtcTx, selectedUTXOs);
             } catch (InsufficientMoneyException | Wallet.ExceededMaxTransactionSize | Wallet.CouldNotAdjustDownwards e) {
@@ -3192,8 +2541,8 @@ public class BridgeSupport {
     }
 
     // Make sure the local bitcoin blockstore is instantiated
-    private void ensureBtcBlockStore() throws IOException, BlockStoreException {
-        if(btcBlockStore == null) {
+   private void ensureBtcBlockStore() throws IOException, BlockStoreException {
+        if (btcBlockStore == null) {
             btcBlockStore = btcBlockStoreFactory.newInstance(
                 rskRepository,
                 bridgeConstants,
@@ -3211,10 +2560,6 @@ public class BridgeSupport {
                 }
             }
         }
-    }
-
-    private Address getParsedAddress(String base58Address) throws AddressFormatException {
-        return Address.fromBase58(btcContext.getParams(), base58Address);
     }
 
     private void generateRejectionRelease(

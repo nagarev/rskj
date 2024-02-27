@@ -2300,7 +2300,7 @@ public class BridgeTestIntegration {
 
         BigInteger decodedResult = (BigInteger) BridgeMethods.ADD_LOCK_WHITELIST_ADDRESS.getFunction().decodeResult(result)[0];
 
-        Assertions.assertEquals(BridgeSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), decodedResult.intValue());
+        Assertions.assertEquals(LockWhitelistSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), decodedResult.intValue());
     }
 
     @Test
@@ -2382,7 +2382,7 @@ public class BridgeTestIntegration {
 
         BigInteger decodedResult = (BigInteger) BridgeMethods.ADD_ONE_OFF_LOCK_WHITELIST_ADDRESS.getFunction().decodeResult(result)[0];
 
-        Assertions.assertEquals(BridgeSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), decodedResult.intValue());
+        Assertions.assertEquals(LockWhitelistSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), decodedResult.intValue());
     }
 
     @Test
@@ -2437,7 +2437,7 @@ public class BridgeTestIntegration {
         BridgeSupport bridgeSupportMock = mock(BridgeSupport.class);
         TestUtils.setInternalState(bridge, "bridgeSupport", bridgeSupportMock);
 
-        Assertions.assertEquals(BridgeSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), decodedResult.intValue());
+        Assertions.assertEquals(LockWhitelistSupport.LOCK_WHITELIST_GENERIC_ERROR_CODE.intValue(), decodedResult.intValue());
     }
 
     @Test
