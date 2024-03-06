@@ -66,8 +66,9 @@ public class BridgeSupportFactory {
             bridgeConstants,
             activations
         );
-
         FederationSupport federationSupport = new FederationSupport(bridgeConstants, provider, executionBlock, activations);
+        FeePerKbStorageProvider feePerKbStorageProvider = new FeePerKbStorageProvider(repository, contractAddress);
+        FeePerKbSupport feePerKbSupport = new FeePerKbSupport(bridgeConstants, feePerKbStorageProvider);
 
         BridgeEventLogger eventLogger;
         if (logs == null) {
@@ -93,6 +94,7 @@ public class BridgeSupportFactory {
                 executionBlock,
                 btcContext,
                 federationSupport,
+                feePerKbSupport,
                 btcBlockStoreFactory,
                 activations,
                 signatureCache

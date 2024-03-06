@@ -15,11 +15,11 @@ public class FeePerKbSupport {
     public static final Integer FEE_PER_KB_GENERIC_ERROR_CODE = -10;
     public static final Integer NEGATIVE_FEE_PER_KB_ERROR_CODE = -1;
     public static final Integer EXCESSIVE_FEE_PER_KB_ERROR_CODE = -2;
-    private final BridgeStorageProvider provider;
+    private final FeePerKbStorageProvider provider;
     private final BridgeConstants bridgeConstants;
     private static final Logger logger = LoggerFactory.getLogger("FeePerKbSupport");
 
-    public FeePerKbSupport(BridgeConstants bridgeConstants, BridgeStorageProvider provider) {
+    public FeePerKbSupport(BridgeConstants bridgeConstants, FeePerKbStorageProvider provider) {
         this.provider = provider;
         this.bridgeConstants = bridgeConstants;
     }

@@ -19,7 +19,6 @@ import static co.rsk.peg.BridgeStorageIndexKey.FEE_PER_KB_KEY;
 public class FeePerKbStorageProvider {
     private Coin feePerKb;
     private ABICallElection feePerKbElection;
-
     private final Repository repository;
     private final RskAddress contractAddress;
 

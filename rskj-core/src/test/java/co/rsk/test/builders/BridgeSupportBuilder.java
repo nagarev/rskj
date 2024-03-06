@@ -4,10 +4,8 @@ import static org.mockito.Mockito.mock;
 
 import co.rsk.bitcoinj.core.Context;
 import co.rsk.config.BridgeConstants;
-import co.rsk.peg.BridgeStorageProvider;
-import co.rsk.peg.BridgeSupport;
+import co.rsk.peg.*;
 import co.rsk.peg.BtcBlockStoreWithCache.Factory;
-import co.rsk.peg.FederationSupport;
 import co.rsk.peg.btcLockSender.BtcLockSenderProvider;
 import co.rsk.peg.pegininstructions.PeginInstructionsProvider;
 import co.rsk.peg.utils.BridgeEventLogger;
@@ -17,6 +15,7 @@ import org.ethereum.core.*;
 public class BridgeSupportBuilder {
     private BridgeConstants bridgeConstants;
     private BridgeStorageProvider provider;
+    private FeePerKbStorageProvider feePerKbProvider;
     private BridgeEventLogger eventLogger;
     private BtcLockSenderProvider btcLockSenderProvider;
     private PeginInstructionsProvider peginInstructionsProvider;
@@ -29,6 +28,7 @@ public class BridgeSupportBuilder {
     public BridgeSupportBuilder() {
         this.bridgeConstants = mock(BridgeConstants.class);
         this.provider = mock(BridgeStorageProvider.class);
+        this.feePerKbProvider = mock(FeePerKbStorageProvider.class);
         this.eventLogger = mock(BridgeEventLogger.class);
         this.btcLockSenderProvider= mock(BtcLockSenderProvider.class);
         this.peginInstructionsProvider = mock(PeginInstructionsProvider.class);
@@ -46,6 +46,11 @@ public class BridgeSupportBuilder {
 
     public BridgeSupportBuilder withProvider(BridgeStorageProvider provider) {
         this.provider = provider;
+        return this;
+    }
+
+    public BridgeSupportBuilder withFeePerKbProvider(FeePerKbStorageProvider provider) {
+        this.feePerKbProvider = provider;
         return this;
     }
 
@@ -100,6 +105,7 @@ public class BridgeSupportBuilder {
             executionBlock,
             new Context(bridgeConstants.getBtcParams()),
             new FederationSupport(bridgeConstants, provider, executionBlock, activations),
+            new FeePerKbSupport(bridgeConstants, feePerKbProvider),
             btcBlockStoreFactory,
             activations,
             signatureCache

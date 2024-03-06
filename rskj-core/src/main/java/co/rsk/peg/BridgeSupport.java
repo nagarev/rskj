@@ -175,6 +175,7 @@ public class BridgeSupport {
             Block executionBlock,
             Context btcContext,
             FederationSupport federationSupport,
+            FeePerKbSupport feePerKbSupport,
             BtcBlockStoreWithCache.Factory btcBlockStoreFactory,
             ActivationConfig.ForBlock activations,
             SignatureCache signatureCache) {
@@ -190,7 +191,7 @@ public class BridgeSupport {
         this.btcBlockStoreFactory = btcBlockStoreFactory;
         this.activations = activations;
         this.signatureCache = signatureCache;
-        this.feePerKbSupport = new FeePerKbSupport(bridgeConstants, provider);
+        this.feePerKbSupport = feePerKbSupport;
         this.federationChangeSupport = new FederationChangeSupport(bridgeConstants, provider, federationSupport, rskExecutionBlock, activations, eventLogger);
         this.lockWhitelistSupport = new LockWhitelistSupport(bridgeConstants, provider, signatureCache);
     }
