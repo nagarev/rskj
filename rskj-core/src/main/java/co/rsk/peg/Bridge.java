@@ -28,6 +28,7 @@ import co.rsk.crypto.Keccak256;
 import co.rsk.panic.PanicProcessor;
 import co.rsk.peg.BridgeMethods.BridgeMethodExecutor;
 import co.rsk.peg.feeperkb.FeePerKbResponseCode;
+import co.rsk.peg.feeperkb.FeePerKbSupport;
 import co.rsk.peg.vote.ABICallSpec;
 import co.rsk.peg.bitcoin.MerkleBranch;
 import co.rsk.peg.federation.Federation;
@@ -223,6 +224,7 @@ public class Bridge extends PrecompiledContracts.PrecompiledContract {
     private org.ethereum.core.Transaction rskTx;
 
     private BridgeSupport bridgeSupport;
+    private FeePerKbSupport feePerKbSupport;
     private final BridgeSupportFactory bridgeSupportFactory;
 
     private final BiFunction<List<Sha256Hash>, Integer, MerkleBranch> merkleBranchFactory;
@@ -342,11 +344,14 @@ public class Bridge extends PrecompiledContracts.PrecompiledContract {
         this.rskTx = args.getTransaction();
         this.msgType = args.getMsgType();
 
+        this.feePerKbSupport = bridgeSupportFactory.getFeePerKbSupportInstance(args.getRepository());
+
         this.bridgeSupport = bridgeSupportFactory.newInstance(
             args.getRepository(),
             rskExecutionBlock,
             contractAddress,
-            args.getLogs()
+            args.getLogs(),
+            feePerKbSupport.getFeePerKb()
         );
     }
 
@@ -462,6 +467,7 @@ public class Bridge extends PrecompiledContracts.PrecompiledContract {
 
     private void teardown() throws IOException {
         bridgeSupport.save();
+        feePerKbSupport.save();
     }
 
     public void updateCollections(Object[] args) throws VMException {
@@ -579,6 +585,7 @@ public class Bridge extends PrecompiledContracts.PrecompiledContract {
         logger.trace("releaseBtc");
 
         try {
+            Coin feePerKb = feePerKbSupport.getFeePerKb();
             bridgeSupport.releaseBtc(rskTx);
         } catch (Program.OutOfGasException e) {
             throw e;
@@ -1131,13 +1138,13 @@ public class Bridge extends PrecompiledContracts.PrecompiledContract {
             return FeePerKbResponseCode.GENERIC_ERROR.getCode();
         }
 
-        return bridgeSupport.voteFeePerKbChange(rskTx, feePerKb);
+        return feePerKbSupport.voteFeePerKbChange(rskTx, feePerKb, signatureCache);
     }
 
     public long getFeePerKb(Object[] args) {
         logger.trace("getFeePerKb");
 
-        return bridgeSupport.getFeePerKb().getValue();
+        return feePerKbSupport.getFeePerKb().getValue();
     }
 
     public long getLockingCap(Object[] args) {

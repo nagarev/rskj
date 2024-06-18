@@ -40,7 +40,6 @@ import co.rsk.peg.bitcoin.RskAllowUnconfirmedCoinSelector;
 import co.rsk.peg.btcLockSender.BtcLockSender.TxSenderAddressType;
 import co.rsk.peg.btcLockSender.BtcLockSenderProvider;
 import co.rsk.peg.federation.*;
-import co.rsk.peg.feeperkb.FeePerKbSupport;
 import co.rsk.peg.flyover.FlyoverFederationInformation;
 import co.rsk.peg.flyover.FlyoverTxResponseCodes;
 import co.rsk.peg.pegin.*;
@@ -124,7 +123,6 @@ public class BridgeSupport {
     private final PeginInstructionsProvider peginInstructionsProvider;
 
     private final FederationSupport federationSupport;
-    private final FeePerKbSupport feePerKbSupport;
     private final WhitelistSupport whitelistSupport;
 
     private final Context btcContext;
@@ -135,6 +133,7 @@ public class BridgeSupport {
     private final ActivationConfig.ForBlock activations;
 
     private final SignatureCache signatureCache;
+    private final Coin feePerKb;
 
     public BridgeSupport(
         BridgeConstants bridgeConstants,
@@ -146,11 +145,11 @@ public class BridgeSupport {
         Block executionBlock,
         Context btcContext,
         FederationSupport federationSupport,
-        FeePerKbSupport feePerKbSupport,
         WhitelistSupport whitelistSupport,
         BtcBlockStoreWithCache.Factory btcBlockStoreFactory,
         ActivationConfig.ForBlock activations,
-        SignatureCache signatureCache) {
+        SignatureCache signatureCache,
+        Coin feePerKb) {
         this.rskRepository = repository;
         this.provider = provider;
         this.rskExecutionBlock = executionBlock;
@@ -160,11 +159,11 @@ public class BridgeSupport {
         this.peginInstructionsProvider = peginInstructionsProvider;
         this.btcContext = btcContext;
         this.federationSupport = federationSupport;
-        this.feePerKbSupport = feePerKbSupport;
         this.whitelistSupport = whitelistSupport;
         this.btcBlockStoreFactory = btcBlockStoreFactory;
         this.activations = activations;
         this.signatureCache = signatureCache;
+        this.feePerKb = feePerKb;
     }
 
     public List<ProgramSubtrace> getSubtraces() {
@@ -190,7 +189,6 @@ public class BridgeSupport {
 
     public void save() throws IOException {
         provider.save();
-        feePerKbSupport.save();
     }
 
     /**
@@ -861,12 +859,11 @@ public class BridgeSupport {
         Optional<RejectedPegoutReason> optionalRejectedPegoutReason = Optional.empty();
         if (activations.isActive(RSKIP219)) {
             int pegoutSize = getRegularPegoutTxSize(activations, getActiveFederation());
-            Coin feePerKB = getFeePerKb();
             // The pegout transaction has a cost related to its size and the current feePerKB
             // The actual cost cannot be asserted exactly so the calculation is approximated
             // On top of this, the remainder after the fee should be enough for the user to be able to operate
             // For this, the calculation includes an additional percentage to assert for this
-            Coin requireFundsForFee = feePerKB
+            Coin requireFundsForFee = feePerKb
                 .multiply(pegoutSize) // times the size in bytes
                 .divide(1000); // Get the s/b
             requireFundsForFee = requireFundsForFee
@@ -1022,7 +1019,7 @@ public class BridgeSupport {
 
     private boolean hasMinimumFundsToMigrate(@Nullable Wallet retiringFederationWallet) {
         // This value is set according to the average 500 bytes transaction size
-        Coin minimumFundsToMigrate = getFeePerKb().divide(2);
+        Coin minimumFundsToMigrate = feePerKb.divide(2);
         return retiringFederationWallet != null
                 && retiringFederationWallet.getBalance().isGreaterThan(minimumFundsToMigrate);
     }
@@ -1109,7 +1106,7 @@ public class BridgeSupport {
                 btcContext.getParams(),
                 activeFederationWallet,
                 getFederationAddress(),
-                getFeePerKb(),
+                feePerKb,
                 activations
         );
 
@@ -2434,14 +2431,6 @@ public class BridgeSupport {
         return whitelistSupport.removeLockWhitelistAddress(tx, addressBase58);
     }
 
-    public Coin getFeePerKb() {
-        return feePerKbSupport.getFeePerKb();
-    }
-
-    public Integer voteFeePerKbChange(Transaction tx, Coin feePerKb) {
-        return feePerKbSupport.voteFeePerKbChange(tx, feePerKb, signatureCache);
-    }
-
     public Integer setLockWhitelistDisableBlockDelay(Transaction tx, BigInteger disableBlockDelayBI)
         throws IOException, BlockStoreException {
         int btcBlockchainBestChainHeight = getBtcBlockchainBestChainHeight();
@@ -2618,9 +2607,7 @@ public class BridgeSupport {
 
         int pegoutTxSize = BridgeUtils.calculatePegoutTxSize(activations, getActiveFederation(), INPUT_MULTIPLIER, totalOutputs);
 
-        Coin feePerKB = getFeePerKb();
-
-        return feePerKB
+        return feePerKb
                 .multiply(pegoutTxSize) // times the size in bytes
                 .divide(1000);
     }
@@ -2971,7 +2958,7 @@ public class BridgeSupport {
 
             SendRequest sr = SendRequest.forTx(migrationBtcTx);
             sr.changeAddress = destinationAddress;
-            sr.feePerKb = getFeePerKb();
+            sr.feePerKb = feePerKb;
             sr.missingSigsMode = Wallet.MissingSigsMode.USE_OP_ZERO;
             sr.recipientsPayFees = true;
             try {
@@ -3049,7 +3036,7 @@ public class BridgeSupport {
             btcContext.getParams(),
             walletProvider.provide(btcTx, spendingAddresses),
             btcRefundAddress,
-            getFeePerKb(),
+            feePerKb,
             activations
         );
 

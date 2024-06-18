@@ -17,6 +17,7 @@
  */
 package co.rsk.peg;
 
+import co.rsk.bitcoinj.core.Coin;
 import co.rsk.bitcoinj.core.Context;
 import co.rsk.peg.constants.BridgeConstants;
 import co.rsk.core.RskAddress;
@@ -73,7 +74,8 @@ public class BridgeSupportFactory {
         Repository repository,
         Block executionBlock,
         RskAddress contractAddress,
-        List<LogInfo> logs) {
+        List<LogInfo> logs,
+        Coin feePerKb) {
 
         ActivationConfig.ForBlock activations = activationConfig.forBlock(executionBlock.getNumber());
         Context btcContext = new Context(bridgeConstants.getBtcParams());
@@ -88,7 +90,6 @@ public class BridgeSupportFactory {
         );
 
         FederationSupport federationSupport = new FederationSupport(bridgeConstants, provider, executionBlock, activations);
-        FeePerKbSupport feePerKbSupport = getFeePerKbSupportInstance(bridgeStorageAccessor);
         WhitelistSupport whitelistSupport = getWhitelistSupportInstance(bridgeStorageAccessor, activations);
 
         BridgeEventLogger eventLogger = null;
@@ -113,15 +114,16 @@ public class BridgeSupportFactory {
             executionBlock,
             btcContext,
             federationSupport,
-            feePerKbSupport,
             whitelistSupport,
             btcBlockStoreFactory,
             activations,
-            signatureCache
+            signatureCache,
+            feePerKb
         );
     }
 
-    private FeePerKbSupport getFeePerKbSupportInstance(StorageAccessor bridgeStorageAccessor) {
+    public FeePerKbSupport getFeePerKbSupportInstance(Repository repository) {
+        StorageAccessor bridgeStorageAccessor = new BridgeStorageAccessorImpl(repository);
         FeePerKbConstants feePerKbConstants = bridgeConstants.getFeePerKbConstants();
         FeePerKbStorageProvider feePerKbStorageProvider = new FeePerKbStorageProviderImpl(bridgeStorageAccessor);
 
