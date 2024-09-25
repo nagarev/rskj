@@ -51,4 +51,8 @@ public class StateForFederator {
         byte[] encodedWaitingForSign = BridgeSerializationUtils.serializeMap(this.rskTxsWaitingForSignatures);
         return RLP.encodeList(encodedWaitingForSign);
     }
+
+    public byte[] getEncoded_new() {
+        return BridgeSerializationUtils.serializeMap(this.rskTxsWaitingForSignatures);
+    }
 }

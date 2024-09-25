@@ -79,6 +79,30 @@ class StateForFederatorTest {
         Assertions.assertTrue(checkKeys(reverseResult.getRskTxsWaitingForSignatures().keySet(), hash1, hash2));
     }
 
+    @Test
+    void serialize_compare_versions() {
+        Keccak256 hash1 = new Keccak256(SHA3_1);
+        Keccak256 hash2 = new Keccak256(SHA3_2);
+        Keccak256 hash3 = new Keccak256(SHA3_3);
+        Keccak256 hash4 = new Keccak256(SHA3_4);
+
+        BtcTransaction tx1 = new BtcTransaction(NETWORK_PARAMETERS);
+        BtcTransaction tx2 = new BtcTransaction(NETWORK_PARAMETERS);
+        BtcTransaction tx3 = new BtcTransaction(NETWORK_PARAMETERS);
+        BtcTransaction tx4 = new BtcTransaction(NETWORK_PARAMETERS);
+
+        SortedMap<Keccak256, BtcTransaction> rskTxsWaitingForSignatures = new TreeMap<>();
+        rskTxsWaitingForSignatures.put(hash1, tx1);
+        rskTxsWaitingForSignatures.put(hash2, tx2);
+
+        StateForFederator stateForFederator = new StateForFederator(rskTxsWaitingForSignatures);
+
+        byte[] encoded = stateForFederator.getEncoded();
+        byte[] encoded_new = stateForFederator.getEncoded_new();
+
+        Assertions.assertArrayEquals(encoded, encoded_new);
+    }
+
     private boolean checkKeys(Set<Keccak256> keccak256s, Keccak256... keys) {
         for(Keccak256 sha3 : keys)
             if(!keccak256s.contains(sha3))
