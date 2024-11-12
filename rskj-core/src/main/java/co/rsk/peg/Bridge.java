@@ -37,6 +37,7 @@ import co.rsk.peg.utils.BtcTransactionFormatUtils;
 import co.rsk.peg.whitelist.LockWhitelistEntry;
 import co.rsk.peg.whitelist.OneOffWhiteListEntry;
 import co.rsk.rpc.modules.trace.ProgramSubtrace;
+import co.rsk.util.HexUtils;
 import com.google.common.annotations.VisibleForTesting;
 import org.ethereum.config.Constants;
 import org.ethereum.config.blockchain.upgrades.ActivationConfig;
@@ -526,6 +527,11 @@ public class Bridge extends PrecompiledContracts.PrecompiledContract {
             try {
                 BtcBlock header = bridgeConstants.getBtcParams().getDefaultSerializer().makeBlock(btcBlockSerialized);
                 btcBlockArray[i] = header;
+
+                if (header.getHash().equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
+                    logger.debug("[receiveHeaders] DETECTALERT Tried to register block {} in RSK transaction {}", header.getHash(), rskTx.getHash());
+                }
+
             } catch (ProtocolException e) {
                 throw new BridgeIllegalArgumentException("Block " + i + " could not be parsed " + ByteUtil.toHexString(btcBlockSerialized), e);
             }
@@ -553,6 +559,10 @@ public class Bridge extends PrecompiledContracts.PrecompiledContract {
         }
 
         BtcBlock header = bridgeConstants.getBtcParams().getDefaultSerializer().makeBlock(headerArg);
+
+        if (header.getHash().equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
+            logger.debug("[receiveHeader] DETECTALERT Tried to manually register block {} in RSK transaction {}", header.getHash(), rskTx.getHash());
+        }
 
         try {
             return bridgeSupport.receiveHeader(header);

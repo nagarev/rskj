@@ -51,6 +51,7 @@ import co.rsk.peg.vote.*;
 import co.rsk.peg.whitelist.*;
 import co.rsk.rpc.modules.trace.CallType;
 import co.rsk.rpc.modules.trace.ProgramSubtrace;
+import co.rsk.util.HexUtils;
 import com.google.common.annotations.VisibleForTesting;
 import java.io.IOException;
 import java.io.InputStream;
@@ -211,6 +212,11 @@ public class BridgeSupport {
         Context.propagate(btcContext);
         this.ensureBtcBlockChain();
         for (BtcBlock header : headers) {
+
+            if (header.getHash().equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
+                logger.debug("[receiveHeaders] DETECTALERT Tried to register block {} at RSK block {}", header.getHash(), rskExecutionBlock.getNumber());
+            }
+
             try {
                 btcBlockChain.add(header);
             } catch (Exception e) {
@@ -228,6 +234,10 @@ public class BridgeSupport {
     public Integer receiveHeader(BtcBlock header) throws IOException, BlockStoreException {
         Context.propagate(btcContext);
         this.ensureBtcBlockChain();
+
+        if (header.getHash().equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
+            logger.debug("[receiveHeader] DETECTALERT Tried to manually register block {} at RSK block {}", header.getHash(), rskExecutionBlock.getNumber());
+        }
 
         if (btcBlockStore.get(header.getHash()) != null) {
             return RECEIVE_HEADER_BLOCK_PREVIOUSLY_SAVED;

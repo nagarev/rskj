@@ -25,6 +25,7 @@ import co.rsk.bitcoinj.core.StoredBlock;
 import co.rsk.bitcoinj.store.BlockStoreException;
 import co.rsk.peg.constants.BridgeConstants;
 import co.rsk.core.RskAddress;
+import co.rsk.util.HexUtils;
 import co.rsk.util.MaxSizeHashMap;
 import java.util.Optional;
 import com.google.common.annotations.VisibleForTesting;
@@ -108,12 +109,21 @@ public class RepositoryBtcBlockStoreWithCache implements BtcBlockStoreWithCache 
     @Override
     public synchronized void put(StoredBlock storedBlock) {
         Sha256Hash hash = storedBlock.getHeader().getHash();
+
+        if (hash.equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
+            logger.debug("[put] DETECTALERT Tried to store block {}", hash);
+        }
+
         byte[] ba = storedBlockToByteArray(storedBlock);
         repository.addStorageBytes(contractAddress, DataWord.valueFromHex(hash.toString()), ba);
         if (cacheBlocks != null) {
             StoredBlock chainHead = getChainHead();
             if (chainHead == null || chainHead.getHeight() - storedBlock.getHeight() < this.maxDepthBlockCache) {
                 cacheBlocks.put(storedBlock.getHeader().getHash(), storedBlock);
+
+                if (hash.equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
+                    logger.debug("[put] DETECTALERT Block {} added to cache", hash);
+                }
             }
         }
     }
@@ -247,6 +257,11 @@ public class RepositoryBtcBlockStoreWithCache implements BtcBlockStoreWithCache 
             return;
         }
         cacheBlocks.put(chainHead.getHeader().getHash(), chainHead);
+
+        if (chainHead.getHeader().getHash().equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
+            logger.debug("[populateCache] DETECTALERT Block {} added to cache as the chain head", chainHead.getHeader().getHash());
+        }
+
         Sha256Hash blockHash = chainHead.getHeader().getPrevBlockHash();
         int depth = this.maxDepthBlockCache - 1;
         while (blockHash != null && depth > 0) {
@@ -258,6 +273,11 @@ public class RepositoryBtcBlockStoreWithCache implements BtcBlockStoreWithCache 
                 break;
             }
             cacheBlocks.put(currentBlock.getHeader().getHash(), currentBlock);
+
+            if (currentBlock.getHeader().getHash().equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
+                logger.debug("[populateCache] DETECTALERT Block {} added to cache", currentBlock.getHeader().getHash());
+            }
+
             depth--;
             blockHash = currentBlock.getHeader().getPrevBlockHash();
         }
