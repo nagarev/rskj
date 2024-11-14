@@ -1343,6 +1343,8 @@ public class Program {
         return ret;
     }
 
+    public static Repository staticTrack;
+
     public void callToPrecompiledAddress(MessageCall msg, PrecompiledContract contract) {
 
         if (getCallDeep() == getMaxDepth()) {
@@ -1353,6 +1355,7 @@ public class Program {
         }
 
         Repository track = getStorage().startTracking();
+        staticTrack = track;
 
         RskAddress senderAddress = getOwnerRskAddress();
         RskAddress codeAddress = new RskAddress(msg.getCodeAddress());

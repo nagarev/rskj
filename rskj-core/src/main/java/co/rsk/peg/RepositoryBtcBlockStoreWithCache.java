@@ -256,11 +256,11 @@ public class RepositoryBtcBlockStoreWithCache implements BtcBlockStoreWithCache 
         if (this.btcNetworkParams.getGenesisBlock().equals(chainHead.getHeader())) {
             return;
         }
-        cacheBlocks.put(chainHead.getHeader().getHash(), chainHead);
 
         if (chainHead.getHeader().getHash().equals(Sha256Hash.wrap(HexUtils.stringHexToByteArray("00000000e8e7b540df01a7067e020fd7e2026bf86289def2283a35120c1af379")))) {
             logger.debug("[populateCache] DETECTALERT Block {} added to cache as the chain head", chainHead.getHeader().getHash());
         }
+        cacheBlocks.put(chainHead.getHeader().getHash(), chainHead);
 
         Sha256Hash blockHash = chainHead.getHeader().getPrevBlockHash();
         int depth = this.maxDepthBlockCache - 1;

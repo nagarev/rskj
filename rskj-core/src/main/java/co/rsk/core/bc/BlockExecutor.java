@@ -222,7 +222,19 @@ public class BlockExecutor {
         return execute(block, parent, discardInvalidTxs, false, true);
     }
 
+    public static Set<Long> blocksRepeated = new HashSet<>();
+
     public BlockResult execute(Block block, BlockHeader parent, boolean discardInvalidTxs, boolean ignoreReadyToExecute, boolean saveState) {
+
+        if (blocksRepeated.contains(block.getNumber())) {
+            logger.error("[DETECTALERT] Block repeated: [{}]", block.getNumber());
+            System.out.println("[DETECTALERT] Block repeated: [" + block.getNumber() + "]");
+        } else {
+            blocksRepeated.add(block.getNumber());
+        }
+
+
+
         return executeInternal(null, 0, block, parent, discardInvalidTxs, ignoreReadyToExecute, saveState);
     }
 
